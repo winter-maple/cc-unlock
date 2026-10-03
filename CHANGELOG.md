@@ -15,6 +15,9 @@
 ### 部署与技能
 
 - Claude 使用原版客户端与工作区 `CLAUDE.md + sec-forge`；不包含改版/副本客户端，不替换原生 `systemPrompt`。
+- **Pi**：新增第三个部署目标。为 `pi`（`@earendil-works/pi-coding-agent`，配置目录 `~/.pi/agent`）部署 `AGENTS.md`（persona 叠加层）与 `skills/sec-forge`。**不写 `SYSTEM.md`** —— 它会整体替换 Pi 的默认系统提示。已有且内容不同的 `AGENTS.md` 默认拒绝覆盖（`-Force` / 界面「强制覆盖」显式替换），卸载只移除与包内容一致的文件。
+- 新增 `cc-unlock-pi` 桌面应用与统一安装器的 Pi 组件；`build-portable.cjs` / `build-installer.cjs` 纳入 pi 的载荷与载体校验。
+- 修复 `Test-SameFile` 对 `Get-FileHash` 的依赖：部分主机缺少 `Microsoft.PowerShell.Utility`，导致 `-Verify` / `-Uninstall` 直接失败；改用 .NET SHA256。
 - 不部署记忆、rollout 摘要、子 agent、rules 或 agent-memory；保留独立任务范围与平台拒绝的真实记录。
 - `sec-forge` 收紧目标路由和验证预算，不默认重复哈希或扩大任务范围。
 - `win-reverse` 升级到 0.3.0，去除硬编码目标和重复完整性检查，修正门禁语义。
