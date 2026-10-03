@@ -6,6 +6,7 @@
 #   ./mac-uninstall.sh /path/to/workspace   从指定工作区移除 | remove from a workspace
 #   ./mac-uninstall.sh --all                从所有工作区移除 | remove from all
 #   ./mac-uninstall.sh --codex              仅移除 Codex | Codex only
+#   ./mac-uninstall.sh --pi                 仅移除 Pi    | Pi only
 #   ./mac-uninstall.sh --list               列出工作区 | list workspaces
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

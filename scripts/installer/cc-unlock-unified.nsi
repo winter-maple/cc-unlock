@@ -30,7 +30,7 @@ UninstallIcon "..\..\assets\cc-unlock.ico"
 ; 升级：装新版前先静默卸掉已装的旧版，避免残留 / 卸载项重复
 Function RequireClosedWorkstation
   check_again:
-    nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "if(Get-Process -Name $\'cc-unlock-claude$\',$\'cc-unlock-codex$\' -ErrorAction SilentlyContinue){exit 1}else{exit 0}"'
+    nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "if(Get-Process -Name $\'cc-unlock-claude$\',$\'cc-unlock-codex$\',$\'cc-unlock-pi$\' -ErrorAction SilentlyContinue){exit 1}else{exit 0}"'
     Pop $2
     Pop $3
     StrCmp $2 "0" ready
@@ -72,6 +72,15 @@ Section "cc-unlock for Codex" SEC_CODEX
   WriteRegDWORD HKCU "Software\cc-unlock" "Codex" 1
 SectionEnd
 
+Section "cc-unlock for Pi" SEC_PI
+  SetOutPath "$INSTDIR\pi"
+  File /r "..\..\cc-unlock-pi\dist\cc-unlock-pi-win32-x64\*"
+  CreateDirectory "$SMPROGRAMS\cc-unlock"
+  CreateShortCut "$SMPROGRAMS\cc-unlock\cc-unlock for Pi.lnk" "$INSTDIR\pi\cc-unlock-pi.exe"
+  CreateShortCut "$DESKTOP\cc-unlock for Pi.lnk" "$INSTDIR\pi\cc-unlock-pi.exe"
+  WriteRegDWORD HKCU "Software\cc-unlock" "Pi" 1
+SectionEnd
+
 Section "-post"
   SetOutPath "$INSTDIR"
   File "..\..\assets\cc-unlock.ico"
@@ -95,6 +104,7 @@ SectionEnd
 Section "Uninstall"
   Delete "$DESKTOP\cc-unlock for Claude Code.lnk"
   Delete "$DESKTOP\cc-unlock for Codex.lnk"
+  Delete "$DESKTOP\cc-unlock for Pi.lnk"
   RMDir /r "$SMPROGRAMS\cc-unlock"
   RMDir /r "$INSTDIR"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\cc-unlock"

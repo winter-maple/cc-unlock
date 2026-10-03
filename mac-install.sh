@@ -7,6 +7,7 @@
 #   ./mac-install.sh /path/to/workspace   部署到指定工作区 | deploy to a workspace
 #   ./mac-install.sh --all                部署到所有工作区 | deploy to all
 #   ./mac-install.sh --codex              仅部署 Codex | Codex only
+#   ./mac-install.sh --pi                 仅部署 Pi    | Pi only
 #   ./mac-install.sh --list               列出工作区 | list workspaces
 #   ./mac-install.sh --verify             验证部署 | verify deployment
 

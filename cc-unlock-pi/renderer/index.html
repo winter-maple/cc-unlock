@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;">
+<title>cc-unlock · Pi v3.0.1-stable</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<a class="skip-link" href="#main">跳到主内容</a>
+<div class="app">
+  <header class="header">
+    <h1>cc-unlock</h1>
+    <span class="header__tag">Pi 工作台</span>
+    <a class="header__link" data-external href="https://github.com/winter-maple/cc-unlock">GitHub</a>
+    <span class="header__meta" id="hdrMeta">v3.0.1-stable</span>
+  </header>
+
+  <nav class="nav" aria-label="主导航">
+    <button class="nav__item is-active" data-page="overview">概览</button>
+    <button class="nav__item" data-page="deploy">部署</button>
+    <button class="nav__item" data-page="settings">路径信息</button>
+    <button class="nav__item" data-page="about">关于</button>
+  </nav>
+
+  <main class="main" id="main">
+    <section class="page is-active" id="page-overview">
+      <h2 class="page__title">工作台概览</h2>
+      <p class="page__sub">只部署 <code>~/.pi/agent/AGENTS.md</code>（persona 叠加层）与 <code>skills/sec-forge</code>；不写 <code>SYSTEM.md</code>，不替换 Pi 内置系统提示。</p>
+      <div class="section-label">本地环境</div>
+      <div class="tiles">
+        <div class="tile"><span class="tile__label">Pi 配置目录</span><span class="tile__value" id="tPiDir">…</span><span class="tile__meta">~/.pi/agent</span></div>
+        <div class="tile"><span class="tile__label">AGENTS.md</span><span class="tile__value" id="tAgents">…</span><span class="tile__meta">persona 叠加层</span></div>
+        <div class="tile"><span class="tile__label">技能资源</span><span class="tile__value" id="tSkills">…</span><span class="tile__meta">sec-forge</span></div>
+        <div class="tile"><span class="tile__label">SYSTEM.md</span><span class="tile__value" id="tSystem">…</span><span class="tile__meta">不应存在</span></div>
+      </div>
+      <div class="section-label">最近操作</div>
+      <div class="console" id="console" role="log" aria-live="polite"></div>
+    </section>
+
+    <section class="page" id="page-deploy">
+      <h2 class="page__title">Pi 部署</h2>
+      <p class="page__sub">部署到当前用户的 <code>~/.pi/agent</code>。已有且内容不同的 <code>AGENTS.md</code> 会被拒绝，需先核对。</p>
+      <div class="card">
+        <div class="field__row">
+          <button class="btn btn--primary" id="btnDeploy">部署</button>
+          <button class="btn btn--secondary" id="btnVerify">验证</button>
+          <button class="btn btn--danger" id="btnUninstall">卸载</button>
+          <button class="btn btn--secondary" id="btnRefresh">刷新状态</button>
+        </div>
+        <label class="toggle"><input type="checkbox" id="chkForce"> 强制覆盖已有的 AGENTS.md</label>
+        <p class="field__help">卸载只移除与包内容一致的文件；你自行修改过的 <code>AGENTS.md</code> 会保留。</p>
+      </div>
+      <div class="section-label">操作日志</div>
+      <div class="console" id="console2" role="log" aria-live="polite"></div>
+    </section>
+
+    <section class="page" id="page-settings">
+      <h2 class="page__title">路径信息</h2>
+      <p class="page__sub">配置与资源目录，只读显示。</p>
+      <div class="card">
+        <div class="field"><label class="field__label" for="pBundle">资源目录</label><input class="field__input" id="pBundle" type="text" readonly></div>
+        <div class="field"><label class="field__label" for="pPiDir">Pi 配置目录</label><input class="field__input" id="pPiDir" type="text" readonly></div>
+        <div class="field"><label class="field__label" for="pAgents">AGENTS.md</label><input class="field__input" id="pAgents" type="text" readonly></div>
+      </div>
+      <p class="notice">不写 <code>SYSTEM.md</code>（替换它会顶掉 Pi 内置工具协议与安全边界）；不修改 <code>settings.json</code> / <code>models.json</code>。</p>
+    </section>
+
+    <section class="page" id="page-about">
+      <h2 class="page__title">关于</h2>
+      <p class="page__sub">cc-unlock v3.0.1-stable · Pi</p>
+      <div class="card">
+        <p>为 <code>pi</code>（<code>@earendil-works/pi-coding-agent</code>）部署 persona 叠加层与 <code>sec-forge</code> 技能。</p>
+        <p class="field__help">Persona 走 <code>&lt;agent-dir&gt;/AGENTS.md</code>，是叠加在 Pi 内置系统提示之上的用户指令层。技能走 <code>skills/&lt;name&gt;/SKILL.md</code>（Agent Skills 规范）。</p>
+        <p class="field__help">不部署记忆、子代理或 rules；JIT 执行方法由主提示词提供。</p>
+      </div>
+      <div class="link-cards"><a data-external href="https://github.com/winter-maple/cc-unlock">项目仓库</a></div>
+    </section>
+  </main>
+</div>
+<script src="shell-common.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

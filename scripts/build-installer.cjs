@@ -19,8 +19,9 @@ const TEMPLATE = path.join(ROOT, 'scripts', 'installer', 'cc-unlock-unified.nsi'
 const MAKENSIS = process.env.CC_UNLOCK_MAKENSIS ? path.resolve(process.env.CC_UNLOCK_MAKENSIS) : path.join(ROOT, '.build-tools', 'nsis', 'Bin', 'makensis.exe');
 const ICON = path.join(ROOT, 'assets', 'cc-unlock.ico');
 const CODEX_REQUIRE = require('./build-dependencies.cjs').resolveBuildDependencies(ROOT).require;
-const APPS = ['claude', 'codex'];
-const APP_FILES = ['main.js', 'preload.js', 'deploy-core.js', 'backup-core.js', 'package.json'];
+const APPS = ['claude', 'codex', 'pi'];
+const APP_FILES = ['main.js', 'preload.js', 'deploy-core.js', 'package.json'];
+const APP_FILES_OPTIONAL = ['backup-core.js'];
 
 function hash(data) { return crypto.createHash('sha256').update(data).digest('hex'); }
 const hashCache = new Map();
@@ -98,10 +99,15 @@ function copyTree(source, destination, runDir) {
 }
 
 function resourcesFor(app) {
+  const bundles = {
+    claude: ['cc-unlock-files/claude-config-bundle', 'claude-config-bundle'],
+    codex: ['codex-files/codex-config-bundle', 'codex-files/codex-config-bundle'],
+    pi: ['pi-files/pi-config-bundle', 'pi-config-bundle'],
+  };
+  const [from, to] = bundles[app];
   return [
-    ...(app === 'claude' ? [[path.join(ROOT,'cc-unlock-files','claude-config-bundle'),'claude-config-bundle']] :
-      [[path.join(ROOT,'codex-files','codex-config-bundle'),'codex-files/codex-config-bundle']]),
-    [path.join(ROOT,'cc-unlock-files','skill-bundle'),'skill-bundle'],
+    [path.join(ROOT, from), to],
+    [path.join(ROOT, 'cc-unlock-files', 'skill-bundle'), 'skill-bundle'],
   ];
 }
 
@@ -121,6 +127,7 @@ function preflight() {
   for (const app of APPS) {
     const appRoot = path.join(ROOT, `cc-unlock-${app}`);
     for (const name of APP_FILES) assert(fs.statSync(assertNoLinks(path.join(appRoot, name))).isFile());
+    for (const name of APP_FILES_OPTIONAL) { const optional = path.join(appRoot, name); if (fs.existsSync(optional)) assert(fs.statSync(assertNoLinks(optional)).isFile()); }
     const pkg = JSON.parse(fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8'));
     assert.equal(pkg.version, VERSION, `Update ${app} package.json to ${VERSION} before packaging.`);
     assert.equal(Object.keys(pkg.dependencies || {}).length, 0, 'Runtime dependencies require an explicit packaging allowlist.');
@@ -138,15 +145,16 @@ function preflight() {
     path.join(ROOT, 'cc-unlock-files', 'claude-config-bundle', 'CLAUDE.md'),
     path.join(ROOT, 'codex-files', 'codex-config-bundle', 'system-prompt.md'),
     path.join(ROOT, 'codex-files', 'codex-config-bundle', 'AGENTS.md'),
+    path.join(ROOT, 'pi-files', 'pi-config-bundle', 'AGENTS.md'),
   ];
-  const canonicals = ['prompts/claude.md', 'prompts/codex-system.md', 'prompts/codex-agents.md'].map(name => path.join(ROOT, name));
+  const canonicals = ['prompts/claude.md', 'prompts/codex-system.md', 'prompts/codex-agents.md', 'prompts/pi-agents.md'].map(name => path.join(ROOT, name));
   const hashes = promptPaths.map(fileHash);
   canonicals.forEach((file, index) => assert.equal(hashes[index], fileHash(file), `Prompt carrier differs from ${file}`));
   assert.deepEqual(fs.readdirSync(path.join(ROOT, 'cc-unlock-files', 'skill-bundle')).sort(), ['sec-forge'], 'Bundle must contain only sec-forge.');
   CODEX_REQUIRE.resolve('@electron/asar');
   CODEX_REQUIRE.resolve('@electron/packager/resedit');
   CODEX_REQUIRE.resolve('resedit');
-  return { version: VERSION, label: LABEL, root: ROOT, makensis: MAKENSIS, release: RELEASE, promptSha256: { claude: hashes[0], codexSystem: hashes[1], codexAgents: hashes[2] } };
+  return { version: VERSION, label: LABEL, root: ROOT, makensis: MAKENSIS, release: RELEASE, promptSha256: { claude: hashes[0], codexSystem: hashes[1], codexAgents: hashes[2], piAgents: hashes[3] } };
 }
 
 function exeResources(file, reseditLib) {
@@ -186,12 +194,14 @@ async function buildApp(app, runDir, dependencies) {
     for (const name of ['app.py','launch.py','editor_core.py','message_edit.py','force_edit.py','writer_lock_cleanup.py','index.html','fixtures.py'])
       assert(fs.statSync(path.join(packaged, 'resources', 'chat-editor', name)).isFile(), `Missing editor payload: ${name}`);
   }
-  const allowed = app === 'claude' ? ['app.asar','claude-config-bundle','skill-bundle'] : ['app.asar','chat-editor','codex-files','skill-bundle'];
+  const allowed = app === 'claude' ? ['app.asar','claude-config-bundle','skill-bundle'] : app === 'pi' ? ['app.asar','pi-config-bundle','skill-bundle'] : ['app.asar','chat-editor','codex-files','skill-bundle'];
   assert.deepEqual(fs.readdirSync(path.join(packaged,'resources')).sort(), allowed.sort(), 'Unexpected retired payload in package');
   const skills = fs.readdirSync(path.join(packaged, 'resources', 'skill-bundle')).sort();
   assert.deepEqual(skills, ['sec-forge'], `Unexpected packaged skills in ${app}`);
   if (app === 'claude') {
     assert.equal(fileHash(path.join(packaged, 'resources', 'claude-config-bundle', 'CLAUDE.md')), fileHash(path.join(ROOT, 'prompts', 'claude.md')));
+  } else if (app === 'pi') {
+    assert.equal(fileHash(path.join(packaged, 'resources', 'pi-config-bundle', 'AGENTS.md')), fileHash(path.join(ROOT, 'prompts', 'pi-agents.md')));
   } else {
     assert.equal(fileHash(path.join(packaged, 'resources', 'codex-files', 'codex-config-bundle', 'system-prompt.md')), fileHash(path.join(ROOT, 'prompts', 'codex-system.md')));
     assert.equal(fileHash(path.join(packaged, 'resources', 'codex-files', 'codex-config-bundle', 'AGENTS.md')), fileHash(path.join(ROOT, 'prompts', 'codex-agents.md')));

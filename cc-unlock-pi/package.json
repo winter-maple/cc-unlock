@@ -1,0 +1,48 @@
+{
+  "name": "cc-unlock-pi",
+  "productName": "cc-unlock for Pi",
+  "version": "3.0.1",
+  "description": "cc-unlock for pi — local maintenance workbench",
+  "main": "main.js",
+  "author": "JacksonTai",
+  "license": "MIT",
+  "scripts": {
+    "predist": "node ../scripts/sync-prompts.cjs --write",
+    "start": "electron .",
+    "dist": "node pack.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.ccunlock.pi",
+    "productName": "cc-unlock-pi",
+    "files": [
+      "main.js",
+      "preload.js",
+      "deploy-core.js",
+      "renderer/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../pi-files/pi-config-bundle",
+        "to": "pi-config-bundle"
+      },
+      {
+        "from": "../cc-unlock-files/skill-bundle",
+        "to": "skill-bundle"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
