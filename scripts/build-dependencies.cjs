@@ -8,6 +8,7 @@ function resolveBuildDependencies(root) {
     process.env.CC_UNLOCK_BUILD_MODULES,
     path.join(root, 'cc-unlock-codex', 'node_modules'),
     path.join(root, 'cc-unlock-claude', 'node_modules'),
+    path.join(root, 'cc-unlock-pi', 'node_modules'),
     // Existing local workstation builds can reuse their installed toolchain.
     path.resolve(root, '..', 'cc-unlock', 'cc-unlock-codex', 'node_modules'),
   ].filter(Boolean);
