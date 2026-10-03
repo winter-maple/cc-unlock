@@ -2,7 +2,7 @@
 # Requires PowerShell 5.1+. Personal memory, agents and global settings are not managed.
 param(
     [string]$Path, [switch]$Uninstall, [switch]$Verify, [switch]$All,
-    [switch]$List, [switch]$GUI, [switch]$Codex, [switch]$SkipSettings,
+    [switch]$List, [switch]$GUI, [switch]$Codex, [switch]$Pi, [switch]$SkipSettings,
     [switch]$SkipSkill, [switch]$Force, [string]$Mode,
     [string]$RelayUrl, [string]$RelayKey, [string]$RelayModel
 )
@@ -16,6 +16,8 @@ $CODEX_DIR = Join-Path $USER_HOME '.codex'
 $CLAUDE_BUNDLE = Join-Path $SCRIPT_DIR 'claude-config-bundle'
 $SKILL_BUNDLE = Join-Path $SCRIPT_DIR 'skill-bundle'
 $CODEX_BUNDLE = Join-Path $SCRIPT_DIR '..\codex-files\codex-config-bundle'
+$PI_DIR = Join-Path $USER_HOME '.pi\agent'
+$PI_BUNDLE = Join-Path $SCRIPT_DIR '..\pi-files\pi-config-bundle'
 $SKILL_DIRS = @('sec-forge')
 function Write-Utf8NoBom($FilePath, $Content) {
     [IO.File]::WriteAllText($FilePath, $Content, $UTF8NoBOM)
@@ -26,7 +28,16 @@ function Copy-Safe($Src, $Dst) {
 }
 function Test-SameFile($Src, $Dst) {
     if (!(Test-Path -LiteralPath $Src -PathType Leaf) -or !(Test-Path -LiteralPath $Dst -PathType Leaf)) { return $false }
-    return ((Get-FileHash -LiteralPath $Src -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $Dst -Algorithm SHA256).Hash)
+    # .NET SHA256 instead of Get-FileHash: the cmdlet lives in Microsoft.PowerShell.Utility,
+    # which is absent/stripped on some hosts. The .NET API is always available.
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $a = $sha.ComputeHash([System.IO.File]::ReadAllBytes($Src))
+        $b = $sha.ComputeHash([System.IO.File]::ReadAllBytes($Dst))
+    } finally { $sha.Dispose() }
+    if ($a.Length -ne $b.Length) { return $false }
+    for ($i = 0; $i -lt $a.Length; $i++) { if ($a[$i] -ne $b[$i]) { return $false } }
+    return $true
 }
 function Assert-NoReparse($Target) {
     $current = [IO.Path]::GetFullPath($Target)
@@ -275,13 +286,86 @@ function Verify-Codex-Config {
     Write-Host '[OK] Codex AGENTS.md; no memory/rollout management'
 }
 
+# --- Pi functions ---
+# pi = @earendil-works/pi-coding-agent; agent dir defaults to ~/.pi/agent.
+# Persona rides on <agent-dir>/AGENTS.md — an overlay on Pi's built-in system prompt.
+# SYSTEM.md is deliberately NOT written: it replaces Pi's default system prompt outright.
+function Deploy-Pi-Skills {
+    if (!$SkipSkill) { Copy-BundleTree (Join-Path $SKILL_BUNDLE 'sec-forge') (Join-Path $PI_DIR 'skills\sec-forge') }
+}
+
+function Uninstall-Pi-Skills {
+    Remove-MatchingTree (Join-Path $SKILL_BUNDLE 'sec-forge') (Join-Path $PI_DIR 'skills\sec-forge')
+}
+
+function Deploy-Pi-Config {
+    Write-Host ''
+    Write-Host '--- Pi ---' -ForegroundColor Cyan
+    if (!(Test-Path $PI_BUNDLE)) {
+        Write-Host '  [skip] Pi bundle not found' -ForegroundColor DarkGray
+        return
+    }
+    if (!(Test-Path $PI_DIR)) {
+        New-Item -ItemType Directory -Path $PI_DIR -Force | Out-Null
+    }
+    $src = Join-Path $PI_BUNDLE 'AGENTS.md'
+    $dst = Join-Path $PI_DIR 'AGENTS.md'
+    if (!(Test-Path -LiteralPath $src -PathType Leaf)) { throw "Missing Pi AGENTS.md bundle: $src" }
+    Assert-NoReparse $dst
+    if ((Test-Path -LiteralPath $dst) -and !(Test-SameFile $src $dst) -and !$Force) {
+        throw 'Existing ~/.pi/agent/AGENTS.md differs. Inspect it first; use -Force to replace explicitly.'
+    }
+    if (Copy-Safe $src $dst) {
+        Write-Host "  [ok] AGENTS.md ($((Get-Item $dst).Length) bytes) - persona overlay" -ForegroundColor Green
+    } else {
+        Write-Host '  [FAIL] AGENTS.md' -ForegroundColor Red
+    }
+    # SYSTEM.md replaces Pi's default system prompt — never write it.
+    Write-Host '  [ok] SYSTEM.md untouched (base prompt intact)' -ForegroundColor DarkGray
+    Deploy-Pi-Skills
+}
+
+function Uninstall-Pi-Config {
+    if (!(Test-Path $PI_DIR)) { return }
+    Write-Host ''
+    Write-Host '--- Pi ---' -ForegroundColor Cyan
+    $src = Join-Path $PI_BUNDLE 'AGENTS.md'
+    $dst = Join-Path $PI_DIR 'AGENTS.md'
+    if (Test-SameFile $src $dst) {
+        Remove-Item -LiteralPath $dst -Force
+        Write-Host '  [ok] Removed AGENTS.md' -ForegroundColor Yellow
+    } else {
+        Write-Host '  [KEEP] AGENTS.md absent or user-modified' -ForegroundColor DarkGray
+    }
+    Uninstall-Pi-Skills
+    Write-Host '  [ok] SYSTEM.md untouched'
+}
+
+function Verify-Pi-Config {
+    if (!(Test-SameFile (Join-Path $PI_BUNDLE 'AGENTS.md') (Join-Path $PI_DIR 'AGENTS.md'))) {
+        throw 'Pi AGENTS.md is missing or differs from bundle'
+    }
+    if (!$SkipSkill) {
+        $src = Join-Path $SKILL_BUNDLE 'sec-forge'
+        $base = [IO.Path]::GetFullPath($src).TrimEnd('\') + '\'
+        foreach ($f in @(Get-ChildItem -LiteralPath $src -Recurse -File)) {
+            $dst = Join-Path (Join-Path $PI_DIR 'skills\sec-forge') $f.FullName.Substring($base.Length)
+            if (!(Test-SameFile $f.FullName $dst)) { throw "Skill mismatch: $dst" }
+        }
+    }
+    if (Test-Path -LiteralPath (Join-Path $PI_DIR 'SYSTEM.md')) {
+        Write-Host '  [warn] SYSTEM.md present - it replaces Pi base prompt' -ForegroundColor Yellow
+    }
+    Write-Host '[OK] Pi AGENTS.md + sec-forge; base system prompt untouched'
+}
+
 try {
     if ($Mode) {
         switch ($Mode.ToLowerInvariant()) {
             'deploy' { } 'install' { } 'uninstall' { $Uninstall = $true }
             'remove' { $Uninstall = $true } 'verify' { $Verify = $true }
             'list' { $List = $true } 'all' { $All = $true }
-            'gui' { $GUI = $true } 'codex' { $Codex = $true }
+            'gui' { $GUI = $true } 'codex' { $Codex = $true } 'pi' { $Pi = $true }
             default { throw "Unknown -Mode: $Mode" }
         }
     }
@@ -300,9 +384,16 @@ try {
         else { Deploy-Codex-Config }
         exit 0
     }
+    if ($Pi) {
+        if ($Uninstall) { Uninstall-Pi-Config }
+        elseif ($Verify) { Verify-Pi-Config }
+        else { Deploy-Pi-Config }
+        exit 0
+    }
     if (!$Path) {
         Write-Host 'Usage: .\deploy.ps1 -Path WORKSPACE [-Force|-Verify|-Uninstall] [-SkipSkill]'
         Write-Host 'Codex is separate: .\deploy.ps1 -Codex [-Verify|-Uninstall]'
+        Write-Host 'Pi is separate:    .\deploy.ps1 -Pi    [-Verify|-Uninstall]'
         exit 0
     }
     if (!(Test-Path -LiteralPath $Path -PathType Container)) { throw "Workspace not found: $Path" }

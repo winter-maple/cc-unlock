@@ -2,6 +2,7 @@
 
 - `claude.md` → `cc-unlock-files/claude-config-bundle/CLAUDE.md` → 用户选中的工作区 `CLAUDE.md`。
 - `codex-system.md`、`codex-agents.md` → Codex 配置包；内容不因本次 Claude 调整而改动。
+- `pi-agents.md` → Pi 配置包（`pi-files/pi-config-bundle/AGENTS.md`）；pi 的 persona 叠加层，不写 `SYSTEM.md`。
 
 Claude 内容以用户提供的“工程分析工作笔记”为底稿，修正缺少 scope/keywords 文件时的处理、增加证据哈希和按需技能路由。保留真实任务性质，不使用虚构成功记录、术语替换或强制拒绝绕过指令。
 

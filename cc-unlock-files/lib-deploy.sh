@@ -6,9 +6,11 @@ _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 : "${CLAUDE_BUNDLE:=$_LIB_DIR/claude-config-bundle}"
 : "${SKILL_BUNDLE:=$_LIB_DIR/skill-bundle}"
 : "${CODEX_BUNDLE:=$_LIB_DIR/../codex-files/codex-config-bundle}"
+: "${PI_BUNDLE:=$_LIB_DIR/../pi-files/pi-config-bundle}"
 CLAUDE_DIR="$HOME/.claude"
 CLAUDE_PROJECTS="$CLAUDE_DIR/projects"
 CODEX_DIR="$HOME/.codex"
+PI_DIR="$HOME/.pi/agent"
 SKILL_DIRS="sec-forge"
 banner() { echo 'cc-unlock v2.4-alpha | CLAUDE.md + sec-forge | no Desktop patch'; }
 footer() { echo '[OK] Complete. Start a new native Claude Code session to test loading.'; }
@@ -234,7 +236,89 @@ verify_codex() {
 }
 
 
-# cc_dispatch install|uninstall [workspace|--verify workspace|--codex|--list]
+# --- Pi (pi-coding-agent) -> ~/.pi/agent/AGENTS.md + skills/ ---
+# Persona rides on <agent-dir>/AGENTS.md (overlay). SYSTEM.md is never written:
+# it replaces Pi's default system prompt outright.
+deploy_pi() {
+    echo ""
+    echo "--- Pi ---"
+    if [ ! -f "$PI_BUNDLE/AGENTS.md" ]; then
+        echo "  [skip] Pi bundle not found: $PI_BUNDLE"
+        return 0
+    fi
+    mkdir -p "$PI_DIR"
+    local dst="$PI_DIR/AGENTS.md" d n
+    no_link_path "$dst" || return 1
+    if [ -e "$dst" ] && ! cmp -s "$PI_BUNDLE/AGENTS.md" "$dst" && [ "${CC_UNLOCK_OVERWRITE:-0}" != '1' ]; then
+        echo "[FAIL] Existing ~/.pi/agent/AGENTS.md differs. Inspect it first; set CC_UNLOCK_OVERWRITE=1 to replace." >&2
+        return 1
+    fi
+    if cp "$PI_BUNDLE/AGENTS.md" "$dst" 2>/dev/null; then
+        echo "  [ok] AGENTS.md ($(wc -c < "$dst" | tr -d ' ') bytes) - persona overlay"
+    else
+        echo "  [FAIL] AGENTS.md"
+        return 1
+    fi
+    echo "  [ok] SYSTEM.md untouched (base prompt intact)"
+    mkdir -p "$PI_DIR/skills"
+    for d in $SKILL_DIRS; do
+        if [ -d "$SKILL_BUNDLE/$d" ]; then
+            if copy_skill_tree "$SKILL_BUNDLE/$d" "$PI_DIR/skills/$d"; then
+                n=$(find "$PI_DIR/skills/$d" -type f 2>/dev/null | wc -l | tr -d ' ')
+                echo "  [ok] skills/$d/ ($n files)"
+            else
+                echo "  [FAIL] skills/$d"
+            fi
+        fi
+    done
+    return 0
+}
+
+uninstall_pi() {
+    [ -d "$PI_DIR" ] || return 0
+    echo ""
+    echo "--- Pi ---"
+    local dst="$PI_DIR/AGENTS.md" d rmn=0
+    if [ -f "$dst" ] && cmp -s "$PI_BUNDLE/AGENTS.md" "$dst"; then
+        rm -f "$dst"
+        echo "  [ok] Removed AGENTS.md"
+    else
+        echo "  [KEEP] AGENTS.md absent or user-modified"
+    fi
+    for d in $SKILL_DIRS; do
+        if [ -d "$PI_DIR/skills/$d" ]; then remove_matching_tree "$SKILL_BUNDLE/$d" "$PI_DIR/skills/$d" && rmn=$((rmn+1)); fi
+    done
+    [ "$rmn" -gt 0 ] && echo "  [ok] Removed $rmn skill(s) from ~/.pi/agent/skills"
+    rmdir "$PI_DIR/skills" 2>/dev/null
+    echo "  [ok] SYSTEM.md untouched"
+    return 0
+}
+
+verify_pi() {
+    if [ ! -d "$PI_DIR" ]; then
+        echo "  [skip] Pi not deployed"
+        return 0
+    fi
+    echo ""
+    echo "--- Pi ---"
+    local dst="$PI_DIR/AGENTS.md" d sok=0 stot=0
+    if [ -f "$dst" ]; then
+        if cmp -s "$PI_BUNDLE/AGENTS.md" "$dst"; then
+            echo "  AGENTS.md - OK ($(wc -c < "$dst" | tr -d ' ') bytes)"
+        else
+            echo "  AGENTS.md - CONTENT MISMATCH"
+        fi
+    else
+        echo "  AGENTS.md - MISSING"
+    fi
+    [ -f "$PI_DIR/SYSTEM.md" ] && echo "  [warn] SYSTEM.md present - it replaces Pi base prompt"
+    for d in $SKILL_DIRS; do stot=$((stot+1)); [ -d "$PI_DIR/skills/$d" ] && sok=$((sok+1)); done
+    if [ "$sok" = "$stot" ]; then echo "  skills - OK ($sok/$stot)"; else echo "  skills - PARTIAL ($sok/$stot)"; fi
+    return 0
+}
+
+
+# cc_dispatch install|uninstall [workspace|--verify workspace|--codex|--pi|--list]
 cc_dispatch() {
     local op="$1" arg ws
     shift
@@ -248,13 +332,15 @@ cc_dispatch() {
             return 1 ;;
         --codex|-c|codex)
             if [ "$op" = 'uninstall' ]; then uninstall_codex; else deploy_codex; fi ;;
+        --pi|-p|pi)
+            if [ "$op" = 'uninstall' ]; then uninstall_pi; else deploy_pi; fi ;;
         --verify|-v|verify)
             ws="${2:-}"
             [ -n "$ws" ] && [ -d "$ws" ] || { echo '[FAIL] --verify requires a workspace path' >&2; return 1; }
             verify_claude "$(cd "$ws" && pwd -P)" ;;
         '')
-            echo 'Usage: install.sh WORKSPACE | --verify WORKSPACE | --codex | --list'
-            echo 'Claude deploys only CLAUDE.md + sec-forge; Codex is separate.' ;;
+            echo 'Usage: install.sh WORKSPACE | --verify WORKSPACE | --codex | --pi | --list'
+            echo 'Claude deploys only CLAUDE.md + sec-forge; Codex and Pi are separate.' ;;
         --*) echo "[FAIL] Unsupported or removed option: $arg" >&2; return 1 ;;
         *)
             [ -d "$arg" ] || { echo "[FAIL] Workspace not found: $arg" >&2; return 1; }

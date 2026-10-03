@@ -6,6 +6,7 @@ const mappings = [
   ['prompts/claude.md', 'cc-unlock-files/claude-config-bundle/CLAUDE.md'],
   ['prompts/codex-system.md', 'codex-files/codex-config-bundle/system-prompt.md'],
   ['prompts/codex-agents.md', 'codex-files/codex-config-bundle/AGENTS.md'],
+  ['prompts/pi-agents.md', 'pi-files/pi-config-bundle/AGENTS.md'],
 ];
 function inside(relative) {
   const absolute = path.resolve(root, relative);

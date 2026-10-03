@@ -6,6 +6,7 @@
 
 - **Claude**：向选定工作区部署 `CLAUDE.md` 和 `.claude/skills/sec-forge/`，继续使用原版 Claude Desktop / Claude Code。不包含 Claude 客户端副本，不替换其原生 `systemPrompt`。
 - **Codex**：部署 `system-prompt.md`、`AGENTS.md` 和 `sec-forge`，保留用户选定的模型。对话编辑简化为“编辑 → 保存”。
+- **Pi**：部署 `~/.pi/agent/AGENTS.md`（persona 叠加层）和 `skills/sec-forge`，供 `pi`（pi-coding-agent）使用。**不写 `SYSTEM.md`** —— 那会整体替换 Pi 的默认系统提示。用户已有的 `AGENTS.md` 内容不同时默认拒绝覆盖，需显式确认。
 - **一键清理历史指令**：无需先扫描，也无需退出 Codex；仅清理历史记录中命中旧 `Collaboration Mode: Default` 模板的 developer 指令字段。保留记录结构、其他字段、用户及助手消息，不删除对话或 SQLite 数据库。
 - **固定顺序**：按当前用户主目录解析 `~/.codex/thread-writer-locks`，先删除其中所有文件（包含隐藏文件、子目录内文件，保留目录），再清理匹配的历史字段。不要求退出 Codex，不以活动/未知进程状态跳过锁清理；删除失败如实记录。
 - **最小部署**：不部署 memory、rollout 摘要、子 agent、rules 或 agent-memory；不写全局 Claude `settings.json`。独立 `jit-harness` 不在部署包中，通用执行流程由主提示词提供。
@@ -36,6 +37,14 @@ PowerShell 部署 Claude 的最小入口：
 ```
 
 这里的示例路径需替换为你的工作区。命令不会顺带部署 Codex；需要时显式使用 `-Codex`。历史个人记忆和子 agent 文件不因文件名相似而自动删除。
+
+Pi（pi-coding-agent）同样单独部署，作用于当前用户的 `~/.pi/agent`：
+
+```powershell
+.\cc-unlock-files\deploy.ps1 -Pi
+.\cc-unlock-files\deploy.ps1 -Pi -Verify
+.\cc-unlock-files\deploy.ps1 -Pi -Uninstall
+```
 
 ## 技能更新
 
