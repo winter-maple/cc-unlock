@@ -4,6 +4,9 @@
 
 ## 本次变化
 
+- 新增 **Pi** 部署目标：为 `pi`（`@earendil-works/pi-coding-agent`）部署 `~/.pi/agent/AGENTS.md`（persona 叠加层）与 `skills/sec-forge`；不写 `SYSTEM.md`。命令行 `-Pi` / `--pi`，桌面端为新的 `cc-unlock for Pi` 应用，统一安装器新增对应组件。
+- 修复部分主机上 `Get-FileHash` 缺失导致 `-Verify` / `-Uninstall` 失败的问题（改用 .NET SHA256）。
+
 - Codex 无需退出即可一键清理磁盘中的旧 Collaboration Mode developer 指令字段，不要求先扫描。保留会话、用户/助手消息、邻接字段、字节偏移及 SQLite。
 - 从当前用户主目录解析 writer 锁目录，固定先删除内含所有文件（含隐藏/子目录文件，目录保留），再清理匹配指令 token。不要求退出 Codex，不因进程活动/未知状态跳过锁清理；删除和字段写入失败如实报告。运行中的 writer 之后可能重建锁。
 - 只改磁盘历史，不热替换当前任务已载入上下文；需要重新载入才能使用新历史。同一目标位置的比对到写入间仍有竞争窗口。
