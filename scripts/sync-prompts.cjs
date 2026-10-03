@@ -7,6 +7,8 @@ const mappings = [
   ['prompts/codex-system.md', 'codex-files/codex-config-bundle/system-prompt.md'],
   ['prompts/codex-agents.md', 'codex-files/codex-config-bundle/AGENTS.md'],
   ['prompts/pi-agents.md', 'pi-files/pi-config-bundle/AGENTS.md'],
+  ['prompts/omp-agents.md', 'omp-files/omp-config-bundle/AGENTS.md'],
+  ['prompts/omp-rules.md', 'omp-files/omp-config-bundle/RULES.md'],
 ];
 function inside(relative) {
   const absolute = path.resolve(root, relative);

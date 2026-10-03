@@ -1,0 +1,48 @@
+{
+  "name": "cc-unlock-omp",
+  "productName": "cc-unlock for omp",
+  "version": "3.0.1",
+  "description": "cc-unlock for omp — local maintenance workbench",
+  "main": "main.js",
+  "author": "JacksonTai",
+  "license": "MIT",
+  "scripts": {
+    "predist": "node ../scripts/sync-prompts.cjs --write",
+    "start": "electron .",
+    "dist": "node pack.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.ccunlock.omp",
+    "productName": "cc-unlock-omp",
+    "files": [
+      "main.js",
+      "preload.js",
+      "deploy-core.js",
+      "renderer/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../omp-files/omp-config-bundle",
+        "to": "omp-config-bundle"
+      },
+      {
+        "from": "../cc-unlock-files/skill-bundle",
+        "to": "skill-bundle"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

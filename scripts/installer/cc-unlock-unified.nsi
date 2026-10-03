@@ -30,7 +30,7 @@ UninstallIcon "..\..\assets\cc-unlock.ico"
 ; 升级：装新版前先静默卸掉已装的旧版，避免残留 / 卸载项重复
 Function RequireClosedWorkstation
   check_again:
-    nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "if(Get-Process -Name $\'cc-unlock-claude$\',$\'cc-unlock-codex$\',$\'cc-unlock-pi$\' -ErrorAction SilentlyContinue){exit 1}else{exit 0}"'
+    nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "if(Get-Process -Name $\'cc-unlock-claude$\',$\'cc-unlock-codex$\',$\'cc-unlock-pi$\',$\'cc-unlock-omp$\' -ErrorAction SilentlyContinue){exit 1}else{exit 0}"'
     Pop $2
     Pop $3
     StrCmp $2 "0" ready
@@ -81,6 +81,15 @@ Section "cc-unlock for Pi" SEC_PI
   WriteRegDWORD HKCU "Software\cc-unlock" "Pi" 1
 SectionEnd
 
+Section "cc-unlock for omp" SEC_OMP
+  SetOutPath "$INSTDIR\omp"
+  File /r "..\..\cc-unlock-omp\dist\cc-unlock-omp-win32-x64\*"
+  CreateDirectory "$SMPROGRAMS\cc-unlock"
+  CreateShortCut "$SMPROGRAMS\cc-unlock\cc-unlock for omp.lnk" "$INSTDIR\omp\cc-unlock-omp.exe"
+  CreateShortCut "$DESKTOP\cc-unlock for omp.lnk" "$INSTDIR\omp\cc-unlock-omp.exe"
+  WriteRegDWORD HKCU "Software\cc-unlock" "Omp" 1
+SectionEnd
+
 Section "-post"
   SetOutPath "$INSTDIR"
   File "..\..\assets\cc-unlock.ico"
@@ -99,12 +108,15 @@ SectionEnd
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC_CLAUDE} "Claude Code 版：仅部署工作区 CLAUDE.md + sec-forge；保留原版 Claude 客户端。"
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC_CODEX} "Codex 版：部署 system-prompt + AGENTS + config + skills 到全局 ~/.codex。"
+  !insertmacro MUI_DESCRIPTION_TEXT ${SEC_PI} "Pi 版：部署 AGENTS.md（persona 叠加层）+ sec-forge 到全局 ~/.pi/agent；不写 SYSTEM.md。"
+  !insertmacro MUI_DESCRIPTION_TEXT ${SEC_OMP} "omp 版：部署 AGENTS.md + RULES.md + sec-forge 到全局 ~/.omp/agent；不写 SYSTEM.md。"
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 Section "Uninstall"
   Delete "$DESKTOP\cc-unlock for Claude Code.lnk"
   Delete "$DESKTOP\cc-unlock for Codex.lnk"
   Delete "$DESKTOP\cc-unlock for Pi.lnk"
+  Delete "$DESKTOP\cc-unlock for omp.lnk"
   RMDir /r "$SMPROGRAMS\cc-unlock"
   RMDir /r "$INSTDIR"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\cc-unlock"

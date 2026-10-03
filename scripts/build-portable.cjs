@@ -13,10 +13,10 @@ function inside(p){const q=path.resolve(p);if(!q.startsWith(root+path.sep))throw
 function clean(p){inside(p);if(fs.existsSync(p)){if(fs.lstatSync(p).isSymbolicLink())throw Error('Refusing link: '+p);fs.rmSync(p,{recursive:true,force:false});}}
 (async()=>{
  const args=process.argv.slice(2);const only=args.includes('--only')?args[args.indexOf('--only')+1]:null;
- if(only&&!['claude','codex','pi'].includes(only))throw Error('Usage: --only claude|codex|pi [--refresh]');
+ if(only&&!['claude','codex','pi','omp'].includes(only))throw Error('Usage: --only claude|codex|pi|omp [--refresh]');
  require('./sync-prompts.cjs').sync('--check', { quiet: true });
  const {resedit}=await import(pathToFileURL(path.join(modules,'@electron','packager','dist','resedit.js')).href);
- for(const kind of only?[only]:['claude','codex','pi']){
+ for(const kind of only?[only]:['claude','codex','pi','omp']){
   const name=`cc-unlock-${kind}`,source=path.join(root,name),old=runtime;
   const output=inside(path.join(source,'dist',`${name}-win32-x64`)),stage=inside(path.join(root,'.build-stage-v3.0',kind));
   if(args.includes('--refresh')){clean(output);clean(stage);}
@@ -25,7 +25,7 @@ function clean(p){inside(p);if(fs.existsSync(p)){if(fs.lstatSync(p).isSymbolicLi
   // Never inherit old deployment resources: runtime and payload have separate allowlists.
   for(const entry of fs.readdirSync(old)){if(entry!=='resources' && entry!=='electron.exe')fs.cpSync(path.join(old,entry),path.join(output,entry),{recursive:true,errorOnExist:true,force:false});}
   const files=['main.js','preload.js','deploy-core.js','package.json','renderer/index.html','renderer/app.js','renderer/app.css'];
-  if(kind!=='pi')files.push('backup-core.js');
+  if(kind==='claude'||kind==='codex')files.push('backup-core.js');
   if(kind==='codex')files.push('chat-editor-host.js','context-host.js','context-worker.js','lock-delete-state.js','maintenance-log.js');
   for(const file of files){const dest=path.join(stage,file);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(path.join(source,file),dest);}
   // Include renderer modules rather than silently shipping only the entry file.
@@ -36,16 +36,17 @@ function clean(p){inside(p);if(fs.existsSync(p)){if(fs.lstatSync(p).isSymbolicLi
   if(fs.existsSync(path.join(source,'assets')))fs.cpSync(path.join(source,'assets'),path.join(stage,'assets'),{recursive:true});
   const resources=path.join(output,'resources');fs.mkdirSync(resources);
   const archive=path.join(resources,'app.asar');await asar.createPackage(stage,archive);
-  const mappings=kind==='claude'?[['cc-unlock-files/claude-config-bundle','claude-config-bundle']]:kind==='codex'?[['codex-files/codex-config-bundle','codex-files/codex-config-bundle']]:[['pi-files/pi-config-bundle','pi-config-bundle']];
+  const mappings=kind==='claude'?[['cc-unlock-files/claude-config-bundle','claude-config-bundle']]:kind==='codex'?[['codex-files/codex-config-bundle','codex-files/codex-config-bundle']]:kind==='pi'?[['pi-files/pi-config-bundle','pi-config-bundle']]:[['omp-files/omp-config-bundle','omp-config-bundle']];
   mappings.push(['cc-unlock-files/skill-bundle','skill-bundle']);
   for(const [from,to] of mappings)fs.cpSync(path.join(root,from),path.join(resources,to),{recursive:true,errorOnExist:true,force:false});
   if(kind==='codex'){const out=path.join(resources,'chat-editor');fs.mkdirSync(out);for(const f of editor)fs.copyFileSync(path.join(source,'chat-editor',f),path.join(out,f));}
-  const allowed=kind==='claude'?['app.asar','claude-config-bundle','skill-bundle']:kind==='codex'?['app.asar','chat-editor','codex-files','skill-bundle']:['app.asar','pi-config-bundle','skill-bundle'];
+  const allowed=kind==='claude'?['app.asar','claude-config-bundle','skill-bundle']:kind==='codex'?['app.asar','chat-editor','codex-files','skill-bundle']:kind==='pi'?['app.asar','pi-config-bundle','skill-bundle']:['app.asar','omp-config-bundle','skill-bundle'];
   if(JSON.stringify(fs.readdirSync(resources).sort())!==JSON.stringify(allowed.sort()))throw Error('Unexpected resource payload');
   if(JSON.stringify(fs.readdirSync(path.join(resources,'skill-bundle')))!==JSON.stringify(['sec-forge']))throw Error('Unexpected skills');
   const integrity={algorithm:'SHA256',hash:crypto.createHash('sha256').update(asar.getRawHeader(archive).headerString).digest('hex')};
   const exe=path.join(output,name+'.exe');fs.copyFileSync(path.join(modules,'electron','dist','electron.exe'),exe);
-  await resedit(exe,{productVersion:version,fileVersion:'3.0.1.0',productName:`cc-unlock for ${kind==='claude'?'Claude Code':'Codex'}`,iconPath:path.join(root,'assets','cc-unlock.ico'),win32Metadata:{FileDescription:`cc-unlock for ${kind==='claude'?'Claude Code':'Codex'}`,OriginalFilename:name+'.exe'},asarIntegrity:{'resources\\app.asar':integrity}});
+  const label=kind==='claude'?'Claude Code':kind==='codex'?'Codex':kind==='pi'?'Pi':'omp';
+  await resedit(exe,{productVersion:version,fileVersion:'3.0.1.0',productName:`cc-unlock for ${label}`,iconPath:path.join(root,'assets','cc-unlock.ico'),win32Metadata:{FileDescription:`cc-unlock for ${label}`,OriginalFilename:name+'.exe'},asarIntegrity:{'resources\\app.asar':integrity}});
   const pkg=JSON.parse(asar.extractFile(archive,'package.json').toString());if(pkg.version!==version)throw Error('Wrong app version');
   for(const f of files)if(!asar.extractFile(archive,f).equals(fs.readFileSync(path.join(source,f))))throw Error('ASAR mismatch '+f);
   const manifest={version,kind,exe,exeSha256:sha(exe),asarSha256:sha(archive),asarHeaderIntegrity:integrity,resources:allowed,editorIncluded:kind==='codex',noMemoryOrSubagentPayload:true};

@@ -7,10 +7,12 @@ _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 : "${SKILL_BUNDLE:=$_LIB_DIR/skill-bundle}"
 : "${CODEX_BUNDLE:=$_LIB_DIR/../codex-files/codex-config-bundle}"
 : "${PI_BUNDLE:=$_LIB_DIR/../pi-files/pi-config-bundle}"
+: "${OMP_BUNDLE:=$_LIB_DIR/../omp-files/omp-config-bundle}"
 CLAUDE_DIR="$HOME/.claude"
 CLAUDE_PROJECTS="$CLAUDE_DIR/projects"
 CODEX_DIR="$HOME/.codex"
 PI_DIR="$HOME/.pi/agent"
+OMP_DIR="$HOME/.omp/agent"
 SKILL_DIRS="sec-forge"
 banner() { echo 'cc-unlock v2.4-alpha | CLAUDE.md + sec-forge | no Desktop patch'; }
 footer() { echo '[OK] Complete. Start a new native Claude Code session to test loading.'; }
@@ -318,7 +320,96 @@ verify_pi() {
 }
 
 
-# cc_dispatch install|uninstall [workspace|--verify workspace|--codex|--pi|--list]
+# --- omp (oh-my-pi) -> ~/.omp/agent/AGENTS.md + RULES.md + skills/ ---
+# SYSTEM.md is never written: it replaces omp's default system prompt.
+deploy_omp() {
+    echo ""
+    echo "--- omp ---"
+    local name
+    for name in AGENTS.md RULES.md; do
+        if [ ! -f "$OMP_BUNDLE/$name" ]; then
+            echo "  [skip] omp bundle not found: $OMP_BUNDLE/$name"
+            return 0
+        fi
+    done
+    mkdir -p "$OMP_DIR"
+    for name in AGENTS.md RULES.md; do
+        local dst="$OMP_DIR/$name"
+        no_link_path "$dst" || return 1
+        if [ -e "$dst" ] && ! cmp -s "$OMP_BUNDLE/$name" "$dst" && [ "${CC_UNLOCK_OVERWRITE:-0}" != '1' ]; then
+            echo "[FAIL] Existing $dst differs. Inspect it first; set CC_UNLOCK_OVERWRITE=1 to replace." >&2
+            return 1
+        fi
+        if cp "$OMP_BUNDLE/$name" "$dst" 2>/dev/null; then
+            echo "  [ok] $name ($(wc -c < "$dst" | tr -d ' ') bytes)"
+        else
+            echo "  [FAIL] $name"
+            return 1
+        fi
+    done
+    echo "  [ok] SYSTEM.md untouched (base prompt intact)"
+    local d n
+    mkdir -p "$OMP_DIR/skills"
+    for d in $SKILL_DIRS; do
+        if [ -d "$SKILL_BUNDLE/$d" ]; then
+            if copy_skill_tree "$SKILL_BUNDLE/$d" "$OMP_DIR/skills/$d"; then
+                n=$(find "$OMP_DIR/skills/$d" -type f 2>/dev/null | wc -l | tr -d ' ')
+                echo "  [ok] skills/$d/ ($n files)"
+            else
+                echo "  [FAIL] skills/$d"
+            fi
+        fi
+    done
+    return 0
+}
+
+uninstall_omp() {
+    [ -d "$OMP_DIR" ] || return 0
+    echo ""
+    echo "--- omp ---"
+    local name dst d rmn=0
+    for name in AGENTS.md RULES.md; do
+        dst="$OMP_DIR/$name"
+        if [ -f "$dst" ] && cmp -s "$OMP_BUNDLE/$name" "$dst"; then
+            rm -f "$dst"
+            echo "  [ok] Removed $name"
+        else
+            echo "  [KEEP] $name absent or user-modified"
+        fi
+    done
+    for d in $SKILL_DIRS; do
+        if [ -d "$OMP_DIR/skills/$d" ]; then remove_matching_tree "$SKILL_BUNDLE/$d" "$OMP_DIR/skills/$d" && rmn=$((rmn+1)); fi
+    done
+    [ "$rmn" -gt 0 ] && echo "  [ok] Removed $rmn skill(s) from ~/.omp/agent/skills"
+    rmdir "$OMP_DIR/skills" 2>/dev/null
+    echo "  [ok] SYSTEM.md untouched"
+    return 0
+}
+
+verify_omp() {
+    if [ ! -d "$OMP_DIR" ]; then
+        echo "  [skip] omp not deployed"
+        return 0
+    fi
+    echo ""
+    echo "--- omp ---"
+    local name dst d sok=0 stot=0
+    for name in AGENTS.md RULES.md; do
+        dst="$OMP_DIR/$name"
+        if [ -f "$dst" ] && cmp -s "$OMP_BUNDLE/$name" "$dst"; then
+            echo "  $name - OK ($(wc -c < "$dst" | tr -d ' ') bytes)"
+        else
+            echo "  $name - MISSING or CONTENT MISMATCH"
+        fi
+    done
+    [ -f "$OMP_DIR/SYSTEM.md" ] && echo "  [warn] SYSTEM.md present - it replaces omp base prompt"
+    for d in $SKILL_DIRS; do stot=$((stot+1)); [ -d "$OMP_DIR/skills/$d" ] && sok=$((sok+1)); done
+    if [ "$sok" = "$stot" ]; then echo "  skills - OK ($sok/$stot)"; else echo "  skills - PARTIAL ($sok/$stot)"; fi
+    return 0
+}
+
+
+# cc_dispatch install|uninstall [workspace|--verify workspace|--codex|--pi|--omp|--list]
 cc_dispatch() {
     local op="$1" arg ws
     shift
@@ -334,13 +425,15 @@ cc_dispatch() {
             if [ "$op" = 'uninstall' ]; then uninstall_codex; else deploy_codex; fi ;;
         --pi|-p|pi)
             if [ "$op" = 'uninstall' ]; then uninstall_pi; else deploy_pi; fi ;;
+        --omp|-o|omp)
+            if [ "$op" = 'uninstall' ]; then uninstall_omp; else deploy_omp; fi ;;
         --verify|-v|verify)
             ws="${2:-}"
             [ -n "$ws" ] && [ -d "$ws" ] || { echo '[FAIL] --verify requires a workspace path' >&2; return 1; }
             verify_claude "$(cd "$ws" && pwd -P)" ;;
         '')
-            echo 'Usage: install.sh WORKSPACE | --verify WORKSPACE | --codex | --pi | --list'
-            echo 'Claude deploys only CLAUDE.md + sec-forge; Codex and Pi are separate.' ;;
+            echo 'Usage: install.sh WORKSPACE | --verify WORKSPACE | --codex | --pi | --omp | --list'
+            echo 'Claude deploys only CLAUDE.md + sec-forge; Codex, Pi and omp are separate.' ;;
         --*) echo "[FAIL] Unsupported or removed option: $arg" >&2; return 1 ;;
         *)
             [ -d "$arg" ] || { echo "[FAIL] Workspace not found: $arg" >&2; return 1; }

@@ -19,7 +19,7 @@ const TEMPLATE = path.join(ROOT, 'scripts', 'installer', 'cc-unlock-unified.nsi'
 const MAKENSIS = process.env.CC_UNLOCK_MAKENSIS ? path.resolve(process.env.CC_UNLOCK_MAKENSIS) : path.join(ROOT, '.build-tools', 'nsis', 'Bin', 'makensis.exe');
 const ICON = path.join(ROOT, 'assets', 'cc-unlock.ico');
 const CODEX_REQUIRE = require('./build-dependencies.cjs').resolveBuildDependencies(ROOT).require;
-const APPS = ['claude', 'codex', 'pi'];
+const APPS = ['claude', 'codex', 'pi', 'omp'];
 const APP_FILES = ['main.js', 'preload.js', 'deploy-core.js', 'package.json'];
 const APP_FILES_OPTIONAL = ['backup-core.js'];
 
@@ -103,6 +103,7 @@ function resourcesFor(app) {
     claude: ['cc-unlock-files/claude-config-bundle', 'claude-config-bundle'],
     codex: ['codex-files/codex-config-bundle', 'codex-files/codex-config-bundle'],
     pi: ['pi-files/pi-config-bundle', 'pi-config-bundle'],
+    omp: ['omp-files/omp-config-bundle', 'omp-config-bundle'],
   };
   const [from, to] = bundles[app];
   return [
@@ -146,15 +147,17 @@ function preflight() {
     path.join(ROOT, 'codex-files', 'codex-config-bundle', 'system-prompt.md'),
     path.join(ROOT, 'codex-files', 'codex-config-bundle', 'AGENTS.md'),
     path.join(ROOT, 'pi-files', 'pi-config-bundle', 'AGENTS.md'),
+    path.join(ROOT, 'omp-files', 'omp-config-bundle', 'AGENTS.md'),
+    path.join(ROOT, 'omp-files', 'omp-config-bundle', 'RULES.md'),
   ];
-  const canonicals = ['prompts/claude.md', 'prompts/codex-system.md', 'prompts/codex-agents.md', 'prompts/pi-agents.md'].map(name => path.join(ROOT, name));
+  const canonicals = ['prompts/claude.md', 'prompts/codex-system.md', 'prompts/codex-agents.md', 'prompts/pi-agents.md', 'prompts/omp-agents.md', 'prompts/omp-rules.md'].map(name => path.join(ROOT, name));
   const hashes = promptPaths.map(fileHash);
   canonicals.forEach((file, index) => assert.equal(hashes[index], fileHash(file), `Prompt carrier differs from ${file}`));
   assert.deepEqual(fs.readdirSync(path.join(ROOT, 'cc-unlock-files', 'skill-bundle')).sort(), ['sec-forge'], 'Bundle must contain only sec-forge.');
   CODEX_REQUIRE.resolve('@electron/asar');
   CODEX_REQUIRE.resolve('@electron/packager/resedit');
   CODEX_REQUIRE.resolve('resedit');
-  return { version: VERSION, label: LABEL, root: ROOT, makensis: MAKENSIS, release: RELEASE, promptSha256: { claude: hashes[0], codexSystem: hashes[1], codexAgents: hashes[2], piAgents: hashes[3] } };
+  return { version: VERSION, label: LABEL, root: ROOT, makensis: MAKENSIS, release: RELEASE, promptSha256: { claude: hashes[0], codexSystem: hashes[1], codexAgents: hashes[2], piAgents: hashes[3], ompAgents: hashes[4], ompRules: hashes[5] } };
 }
 
 function exeResources(file, reseditLib) {
@@ -194,7 +197,7 @@ async function buildApp(app, runDir, dependencies) {
     for (const name of ['app.py','launch.py','editor_core.py','message_edit.py','force_edit.py','writer_lock_cleanup.py','index.html','fixtures.py'])
       assert(fs.statSync(path.join(packaged, 'resources', 'chat-editor', name)).isFile(), `Missing editor payload: ${name}`);
   }
-  const allowed = app === 'claude' ? ['app.asar','claude-config-bundle','skill-bundle'] : app === 'pi' ? ['app.asar','pi-config-bundle','skill-bundle'] : ['app.asar','chat-editor','codex-files','skill-bundle'];
+  const allowed = app === 'claude' ? ['app.asar','claude-config-bundle','skill-bundle'] : app === 'pi' ? ['app.asar','pi-config-bundle','skill-bundle'] : app === 'omp' ? ['app.asar','omp-config-bundle','skill-bundle'] : ['app.asar','chat-editor','codex-files','skill-bundle'];
   assert.deepEqual(fs.readdirSync(path.join(packaged,'resources')).sort(), allowed.sort(), 'Unexpected retired payload in package');
   const skills = fs.readdirSync(path.join(packaged, 'resources', 'skill-bundle')).sort();
   assert.deepEqual(skills, ['sec-forge'], `Unexpected packaged skills in ${app}`);
@@ -202,6 +205,9 @@ async function buildApp(app, runDir, dependencies) {
     assert.equal(fileHash(path.join(packaged, 'resources', 'claude-config-bundle', 'CLAUDE.md')), fileHash(path.join(ROOT, 'prompts', 'claude.md')));
   } else if (app === 'pi') {
     assert.equal(fileHash(path.join(packaged, 'resources', 'pi-config-bundle', 'AGENTS.md')), fileHash(path.join(ROOT, 'prompts', 'pi-agents.md')));
+  } else if (app === 'omp') {
+    assert.equal(fileHash(path.join(packaged, 'resources', 'omp-config-bundle', 'AGENTS.md')), fileHash(path.join(ROOT, 'prompts', 'omp-agents.md')));
+    assert.equal(fileHash(path.join(packaged, 'resources', 'omp-config-bundle', 'RULES.md')), fileHash(path.join(ROOT, 'prompts', 'omp-rules.md')));
   } else {
     assert.equal(fileHash(path.join(packaged, 'resources', 'codex-files', 'codex-config-bundle', 'system-prompt.md')), fileHash(path.join(ROOT, 'prompts', 'codex-system.md')));
     assert.equal(fileHash(path.join(packaged, 'resources', 'codex-files', 'codex-config-bundle', 'AGENTS.md')), fileHash(path.join(ROOT, 'prompts', 'codex-agents.md')));

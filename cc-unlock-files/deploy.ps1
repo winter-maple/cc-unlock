@@ -2,7 +2,7 @@
 # Requires PowerShell 5.1+. Personal memory, agents and global settings are not managed.
 param(
     [string]$Path, [switch]$Uninstall, [switch]$Verify, [switch]$All,
-    [switch]$List, [switch]$GUI, [switch]$Codex, [switch]$Pi, [switch]$SkipSettings,
+    [switch]$List, [switch]$GUI, [switch]$Codex, [switch]$Pi, [switch]$Omp, [switch]$SkipSettings,
     [switch]$SkipSkill, [switch]$Force, [string]$Mode,
     [string]$RelayUrl, [string]$RelayKey, [string]$RelayModel
 )
@@ -18,6 +18,8 @@ $SKILL_BUNDLE = Join-Path $SCRIPT_DIR 'skill-bundle'
 $CODEX_BUNDLE = Join-Path $SCRIPT_DIR '..\codex-files\codex-config-bundle'
 $PI_DIR = Join-Path $USER_HOME '.pi\agent'
 $PI_BUNDLE = Join-Path $SCRIPT_DIR '..\pi-files\pi-config-bundle'
+$OMP_DIR = Join-Path $USER_HOME '.omp\agent'
+$OMP_BUNDLE = Join-Path $SCRIPT_DIR '..\omp-files\omp-config-bundle'
 $SKILL_DIRS = @('sec-forge')
 function Write-Utf8NoBom($FilePath, $Content) {
     [IO.File]::WriteAllText($FilePath, $Content, $UTF8NoBOM)
@@ -359,13 +361,92 @@ function Verify-Pi-Config {
     Write-Host '[OK] Pi AGENTS.md + sec-forge; base system prompt untouched'
 }
 
+# --- omp functions ---
+# omp = oh-my-pi (fork of pi); agent dir defaults to ~/.omp/agent.
+# Carriers: AGENTS.md (context overlay) + RULES.md (sticky always-apply rules)
+#           + skills/. SYSTEM.md is deliberately NOT written — it replaces omp's
+#           default system prompt outright.
+function Deploy-Omp-Skills {
+    if (!$SkipSkill) { Copy-BundleTree (Join-Path $SKILL_BUNDLE 'sec-forge') (Join-Path $OMP_DIR 'skills\sec-forge') }
+}
+
+function Uninstall-Omp-Skills {
+    Remove-MatchingTree (Join-Path $SKILL_BUNDLE 'sec-forge') (Join-Path $OMP_DIR 'skills\sec-forge')
+}
+
+function Deploy-Omp-Config {
+    Write-Host ''
+    Write-Host '--- omp ---' -ForegroundColor Cyan
+    if (!(Test-Path $OMP_BUNDLE)) {
+        Write-Host '  [skip] omp bundle not found' -ForegroundColor DarkGray
+        return
+    }
+    if (!(Test-Path $OMP_DIR)) {
+        New-Item -ItemType Directory -Path $OMP_DIR -Force | Out-Null
+    }
+    foreach ($pair in @(@{ Name = 'AGENTS.md'; Label = 'persona overlay' }, @{ Name = 'RULES.md'; Label = 'sticky rules' })) {
+        $src = Join-Path $OMP_BUNDLE $pair.Name
+        $dst = Join-Path $OMP_DIR $pair.Name
+        if (!(Test-Path -LiteralPath $src -PathType Leaf)) { throw "Missing omp bundle file: $src" }
+        Assert-NoReparse $dst
+        if ((Test-Path -LiteralPath $dst) -and !(Test-SameFile $src $dst) -and !$Force) {
+            throw "Existing $dst differs. Inspect it first; use -Force to replace explicitly."
+        }
+        if (Copy-Safe $src $dst) {
+            Write-Host "  [ok] $($pair.Name) ($((Get-Item $dst).Length) bytes) - $($pair.Label)" -ForegroundColor Green
+        } else {
+            Write-Host "  [FAIL] $($pair.Name)" -ForegroundColor Red
+        }
+    }
+    Write-Host '  [ok] SYSTEM.md untouched (base prompt intact)' -ForegroundColor DarkGray
+    Deploy-Omp-Skills
+}
+
+function Uninstall-Omp-Config {
+    if (!(Test-Path $OMP_DIR)) { return }
+    Write-Host ''
+    Write-Host '--- omp ---' -ForegroundColor Cyan
+    foreach ($name in @('AGENTS.md', 'RULES.md')) {
+        $src = Join-Path $OMP_BUNDLE $name
+        $dst = Join-Path $OMP_DIR $name
+        if (Test-SameFile $src $dst) {
+            Remove-Item -LiteralPath $dst -Force
+            Write-Host "  [ok] Removed $name" -ForegroundColor Yellow
+        } else {
+            Write-Host "  [KEEP] $name absent or user-modified" -ForegroundColor DarkGray
+        }
+    }
+    Uninstall-Omp-Skills
+    Write-Host '  [ok] SYSTEM.md untouched'
+}
+
+function Verify-Omp-Config {
+    foreach ($name in @('AGENTS.md', 'RULES.md')) {
+        if (!(Test-SameFile (Join-Path $OMP_BUNDLE $name) (Join-Path $OMP_DIR $name))) {
+            throw "omp $name is missing or differs from bundle"
+        }
+    }
+    if (!$SkipSkill) {
+        $src = Join-Path $SKILL_BUNDLE 'sec-forge'
+        $base = [IO.Path]::GetFullPath($src).TrimEnd('\') + '\'
+        foreach ($f in @(Get-ChildItem -LiteralPath $src -Recurse -File)) {
+            $dst = Join-Path (Join-Path $OMP_DIR 'skills\sec-forge') $f.FullName.Substring($base.Length)
+            if (!(Test-SameFile $f.FullName $dst)) { throw "Skill mismatch: $dst" }
+        }
+    }
+    if (Test-Path -LiteralPath (Join-Path $OMP_DIR 'SYSTEM.md')) {
+        Write-Host '  [warn] SYSTEM.md present - it replaces omp base prompt' -ForegroundColor Yellow
+    }
+    Write-Host '[OK] omp AGENTS.md + RULES.md + sec-forge; base system prompt untouched'
+}
+
 try {
     if ($Mode) {
         switch ($Mode.ToLowerInvariant()) {
             'deploy' { } 'install' { } 'uninstall' { $Uninstall = $true }
             'remove' { $Uninstall = $true } 'verify' { $Verify = $true }
             'list' { $List = $true } 'all' { $All = $true }
-            'gui' { $GUI = $true } 'codex' { $Codex = $true } 'pi' { $Pi = $true }
+            'gui' { $GUI = $true } 'codex' { $Codex = $true } 'pi' { $Pi = $true } 'omp' { $Omp = $true }
             default { throw "Unknown -Mode: $Mode" }
         }
     }
@@ -390,10 +471,17 @@ try {
         else { Deploy-Pi-Config }
         exit 0
     }
+    if ($Omp) {
+        if ($Uninstall) { Uninstall-Omp-Config }
+        elseif ($Verify) { Verify-Omp-Config }
+        else { Deploy-Omp-Config }
+        exit 0
+    }
     if (!$Path) {
         Write-Host 'Usage: .\deploy.ps1 -Path WORKSPACE [-Force|-Verify|-Uninstall] [-SkipSkill]'
         Write-Host 'Codex is separate: .\deploy.ps1 -Codex [-Verify|-Uninstall]'
         Write-Host 'Pi is separate:    .\deploy.ps1 -Pi    [-Verify|-Uninstall]'
+        Write-Host 'omp is separate:   .\deploy.ps1 -Omp   [-Verify|-Uninstall]'
         exit 0
     }
     if (!(Test-Path -LiteralPath $Path -PathType Container)) { throw "Workspace not found: $Path" }
